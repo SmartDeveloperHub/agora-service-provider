@@ -27,15 +27,20 @@ __author__ = 'Fernando Serena'
 
 from flask import Flask, jsonify, request
 from functools import wraps
-from agora.provider.jobs.collect import add_triple_pattern, collect_fragment
+from agora.provider.jobs.collect import collect_fragment
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.redis import RedisJobStore
 from datetime import datetime as dt, timedelta as delta
 
 _batch_tasks = []
-_after_collect_tasks = []
+
+# Configuration dictionary that will be populated on application run
+config = {}
 
 class APIError(Exception):
+    """
+    Exception class to raise when an API request is not valid
+    """
     status_code = 400
 
     def __init__(self, message, status_code=None, payload=None):
@@ -52,22 +57,36 @@ class APIError(Exception):
 
 
 class NotFound(APIError):
+    """
+    404 response class
+    """
     def __init__(self, message, payload=None):
         super(NotFound, self).__init__(message, 404, payload)
 
 
 class Conflict(APIError):
+    """
+    409 response class
+    """
     def __init__(self, message, payload=None):
         super(Conflict, self).__init__(message, 409, payload)
 
 
 class AgoraApp(Flask):
-    def __init__(self, name):
+    """
+    Provider base class for the Agora services
+    """
+    def __init__(self, name, config_class):
+        """
+        :param name: App name
+        :param config_class: String that represents the config class to be used
+        :return:
+        """
         super(AgoraApp, self).__init__(name)
         self.__handlers = {}
         self.errorhandler(self.__handle_invalid_usage)
         self._scheduler = BackgroundScheduler()
-        # self._on_base_
+        self.config.from_object(config_class)
 
     @staticmethod
     def __handle_invalid_usage(error):
@@ -81,34 +100,33 @@ class AgoraApp(Flask):
 
     @classmethod
     def batch_work(cls):
+        """
+        Method to be executed in batch mode for collecting the required fragment (composite)
+        and then other custom tasks.
+        :return:
+        """
         collect_fragment()
         for task in _batch_tasks:
             task()
 
     def run(self, host=None, port=None, debug=None, **options):
+        """
+        Start the AgoraApp expecting the provided config to have at least REDIS and PORT fields.
+        """
         jobstores = {
             'default': RedisJobStore(db=4, host=self.config['REDIS'])
         }
         executors = {
             'default': {'type': 'threadpool', 'max_workers': 20}
-            # 'processpool': ProcessPoolExecutor(max_workers=5)
-        }
-        job_defaults = {
-            # 'coalesce': False,
-            # 'max_instances': 3
         }
 
         tasks = options.get('tasks', [])
-        self._scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults)
+        self._scheduler.configure(jobstores=jobstores, executors=executors, job_defaults={})
         self._scheduler.add_listener(self.__scheduler_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
         for task in tasks:
             if task is not None and hasattr(task, '__call__'):
                 _batch_tasks.append(task)
 
-        after = options.get('after', [])
-        for task in after:
-            if task is not None and hasattr(task, '__call__'):
-                _after_collect_tasks.append(task)
         self._scheduler.add_job(AgoraApp.batch_work, 'date', run_date=str(dt.now() + delta(seconds=1)))
         self._scheduler.start()
         super(AgoraApp, self).run(host='0.0.0.0', port=self.config['PORT'], debug=True, use_reloader=False)
@@ -118,25 +136,25 @@ class AgoraApp(Flask):
         def wrapper():
             args, kwargs = self.__handlers[f.func_name](request)
             data = f(*args, **kwargs)
-            response_dict = {'result': data, 'begin': int(kwargs['begin']), 'end': int(kwargs['end'])}
+            begin = int(kwargs['begin'])
+            if isinstance(data, tuple):
+                begin = data[0]
+                data = data[1]
+            response_dict = {'result': data, 'begin': begin, 'end': int(kwargs['end'])}
             if type(data) == list:
                 response_dict['size'] = len(data)
             return jsonify(response_dict)
         return wrapper
 
-    def __register(self, handler, pattern, collector):
+    def __register(self, handler):
         def decorator(f):
             self.__handlers[f.func_name] = handler
-            if pattern is not None:
-                for tp in pattern:
-                    add_triple_pattern(tp, collector)
             return f
         return decorator
 
-    def collect(self, path, handler, pattern, collector=None):
+    def register(self, path, handler):
         def decorator(f):
-            for dec in [self.__execute, self.__register(handler, pattern, collector), self.route(path)]:
+            for dec in [self.__execute, self.__register(handler), self.route(path)]:
                 f = dec(f)
             return f
-
         return decorator

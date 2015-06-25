@@ -38,6 +38,6 @@ setup(
     download_url="https://github.com/smartdeveloperhub/agora-service-provider/tarball/0.0.1",
     packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
     namespace_packages=['agora'],
-    install_requires=['flask', 'Flask-Negotiate', 'requests', 'rdflib', 'APScheduler'],
+    install_requires=['flask', 'rdflib', 'APScheduler', 'Agora-Client'],
     classifiers=[]
 )
