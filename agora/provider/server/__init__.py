@@ -21,14 +21,11 @@
   limitations under the License.
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 """
-from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
-
 __author__ = 'Fernando Serena'
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, make_response
 from functools import wraps
 from agora.provider.jobs.collect import collect_fragment
-from concurrent.futures.thread import ThreadPoolExecutor
 from threading import Thread, Event
 import time
 
@@ -37,6 +34,9 @@ _batch_tasks = []
 # Configuration dictionary that will be populated on application run
 config = {}
 
+
+def get_accept():
+    return str(request.accept_mimetypes).split(',')
 
 class APIError(Exception):
     """
@@ -88,6 +88,7 @@ class AgoraApp(Flask):
         """
         super(AgoraApp, self).__init__(name)
         self.__handlers = {}
+        self.__rdfizers = {}
         self.errorhandler(self.__handle_invalid_usage)
         self.config.from_object(config_class)
         self._stop_event = Event()
@@ -132,26 +133,49 @@ class AgoraApp(Flask):
         if thread.isAlive():
             thread.join()
 
+    # def __decide_invocation(self, f):
+    #     @wraps(f)
+    #     def wrapper(*args, **kwargs):
+    #         mimes = get_accept()
+    #         if 'application/json' in mimes:
+    #             data = f(*args, **kwargs)
+    #             context = kwargs
+    #             if isinstance(data, tuple):
+    #                 context['begin'] = data[0]
+    #                 data = data[1]
+    #             if type(data) == list:
+    #                 context['size'] = len(data)
+    #             return context, data
+    #         return self.__rdfizers[f.func_name](f.func_name)
+    #     return wrapper
+
     def __execute(self, f):
         @wraps(f)
         def wrapper():
-            args, kwargs = self.__handlers[f.func_name](request)
-            context, data = f(*args, **kwargs)
-            response_dict = {'context': context, 'result': data}
-            return jsonify(response_dict)
+            mimes = get_accept()
+            if 'application/json' in mimes:
+                args, kwargs = self.__handlers[f.func_name](request)
+                context, data = f(*args, **kwargs)
+                response_dict = {'context': context, 'result': data}
+                return jsonify(response_dict)
+            else:
+                response = make_response(self.__rdfizers[f.func_name](f.func_name).serialize(format='turtle'))
+                response.headers['Content-Type'] = 'text-turtle'
+                return response
 
         return wrapper
 
-    def __register(self, handler):
+    def __register(self, handler, rdfizer):
         def decorator(f):
             self.__handlers[f.func_name] = handler
+            self.__rdfizers[f.func_name] = rdfizer
             return f
 
         return decorator
 
-    def register(self, path, handler):
+    def register(self, path, handler, rdfizer):
         def decorator(f):
-            for dec in [self.__execute, self.__register(handler), self.route(path)]:
+            for dec in [self.__execute, self.__register(handler, rdfizer), self.route(path)]:
                 f = dec(f)
             return f
 
