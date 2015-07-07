@@ -136,14 +136,8 @@ class AgoraApp(Flask):
         @wraps(f)
         def wrapper():
             args, kwargs = self.__handlers[f.func_name](request)
-            data = f(*args, **kwargs)
-            begin = int(kwargs['begin'])
-            if isinstance(data, tuple):
-                begin = data[0]
-                data = data[1]
-            response_dict = {'result': data, 'begin': begin, 'end': int(kwargs['end'])}
-            if type(data) == list:
-                response_dict['size'] = len(data)
+            context, data = f(*args, **kwargs)
+            response_dict = {'context': context, 'result': data}
             return jsonify(response_dict)
 
         return wrapper
