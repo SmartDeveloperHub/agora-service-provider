@@ -21,21 +21,22 @@
   limitations under the License.
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 """
-from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
 
 __author__ = 'Fernando Serena'
 
 from flask import Flask, jsonify, request
 from functools import wraps
 from agora.provider.jobs.collect import collect_fragment
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.jobstores.redis import RedisJobStore
-from datetime import datetime as dt, timedelta as delta
+from concurrent.futures.thread import ThreadPoolExecutor
+from threading import Thread, Event
+import time
 
 _batch_tasks = []
 
 # Configuration dictionary that will be populated on application run
 config = {}
+
 
 class APIError(Exception):
     """
@@ -60,6 +61,7 @@ class NotFound(APIError):
     """
     404 response class
     """
+
     def __init__(self, message, payload=None):
         super(NotFound, self).__init__(message, 404, payload)
 
@@ -68,6 +70,7 @@ class Conflict(APIError):
     """
     409 response class
     """
+
     def __init__(self, message, payload=None):
         super(Conflict, self).__init__(message, 409, payload)
 
@@ -76,6 +79,7 @@ class AgoraApp(Flask):
     """
     Provider base class for the Agora services
     """
+
     def __init__(self, name, config_class):
         """
         :param name: App name
@@ -85,8 +89,8 @@ class AgoraApp(Flask):
         super(AgoraApp, self).__init__(name)
         self.__handlers = {}
         self.errorhandler(self.__handle_invalid_usage)
-        self._scheduler = BackgroundScheduler()
         self.config.from_object(config_class)
+        self._stop_event = Event()
 
     @staticmethod
     def __handle_invalid_usage(error):
@@ -94,42 +98,39 @@ class AgoraApp(Flask):
         response.status_code = error.status_code
         return response
 
-    def __scheduler_listener(self, event):
-        print event
-        self._scheduler.add_job(AgoraApp.batch_work, 'date', run_date=str(dt.now() + delta(seconds=10)))
-
-    @classmethod
-    def batch_work(cls):
+    def batch_work(self):
         """
         Method to be executed in batch mode for collecting the required fragment (composite)
         and then other custom tasks.
         :return:
         """
-        collect_fragment()
-        for task in _batch_tasks:
-            task()
+        while True:
+            collect_fragment(self._stop_event)
+            for task in _batch_tasks:
+                task(self._stop_event)
+            time.sleep(10)
+            if self._stop_event.isSet():
+                return
 
     def run(self, host=None, port=None, debug=None, **options):
         """
         Start the AgoraApp expecting the provided config to have at least REDIS and PORT fields.
         """
-        jobstores = {
-            'default': RedisJobStore(db=4, host=self.config['REDIS'])
-        }
-        executors = {
-            'default': {'type': 'threadpool', 'max_workers': 20}
-        }
 
         tasks = options.get('tasks', [])
-        self._scheduler.configure(jobstores=jobstores, executors=executors, job_defaults={})
-        self._scheduler.add_listener(self.__scheduler_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
         for task in tasks:
             if task is not None and hasattr(task, '__call__'):
                 _batch_tasks.append(task)
 
-        self._scheduler.add_job(AgoraApp.batch_work, 'date', run_date=str(dt.now() + delta(seconds=1)))
-        self._scheduler.start()
-        super(AgoraApp, self).run(host='0.0.0.0', port=self.config['PORT'], debug=True, use_reloader=False)
+        thread = Thread(target=self.batch_work)
+        thread.start()
+        try:
+            super(AgoraApp, self).run(host='0.0.0.0', port=self.config['PORT'], debug=True, use_reloader=False)
+        except Exception, e:
+            print e.message
+        self._stop_event.set()
+        if thread.isAlive():
+            thread.join()
 
     def __execute(self, f):
         @wraps(f)
@@ -144,12 +145,14 @@ class AgoraApp(Flask):
             if type(data) == list:
                 response_dict['size'] = len(data)
             return jsonify(response_dict)
+
         return wrapper
 
     def __register(self, handler):
         def decorator(f):
             self.__handlers[f.func_name] = handler
             return f
+
         return decorator
 
     def register(self, path, handler):
@@ -157,4 +160,5 @@ class AgoraApp(Flask):
             for dec in [self.__execute, self.__register(handler), self.route(path)]:
                 f = dec(f)
             return f
+
         return decorator

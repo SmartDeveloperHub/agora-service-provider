@@ -2,10 +2,12 @@ __author__ = 'fernando'
 
 from agora.client.agora import Agora, AGORA
 from rdflib import RDF, RDFS
+import logging
 
 __triple_patterns = {}
 __plan_patterns = {}
 
+log = logging.getLogger('agora.provider')
 
 def collect(tp, *args):
     """
@@ -57,7 +59,7 @@ def __extract_pattern_nodes(graph):
         __plan_patterns[tpn] = '{} {} {}'.format(subject_str, predicate_str, object_str)
 
 
-def collect_fragment():
+def collect_fragment(event):
     """
     Execute a search plan for the declared graph pattern and sends all obtained triples to the corresponding
     collector functions (config
@@ -68,12 +70,14 @@ def collect_fragment():
     graph_pattern = ""
     for tp in __triple_patterns:
         graph_pattern += '{} . '.format(tp)
-    fragment, _, graph = agora.get_fragment_generator('{%s}' % graph_pattern)
+    fragment, _, graph = agora.get_fragment_generator('{%s}' % graph_pattern, stop_event=event)
     __extract_pattern_nodes(graph)
-    print 'querying { %s}' % graph_pattern
+    log.info('querying { %s}' % graph_pattern)
     for (t, s, p, o) in fragment:
         collectors = __triple_patterns[str(__plan_patterns[t])]
         for c, args in collectors:
-            # print 'Sending triple {} {} {} to {}'.format(s.n3(graph.namespace_manager), graph.qname(p),
-            #                                              o.n3(graph.namespace_manager), c)
+            print 'Sending triple {} {} {} to {}'.format(s.n3(graph.namespace_manager), graph.qname(p),
+                                                         o.n3(graph.namespace_manager), c)
             c((s, p, o))
+        if event.isSet():
+            return
