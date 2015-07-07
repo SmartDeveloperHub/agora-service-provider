@@ -38,6 +38,7 @@ config = {}
 def get_accept():
     return str(request.accept_mimetypes).split(',')
 
+
 class APIError(Exception):
     """
     Exception class to raise when an API request is not valid
@@ -132,22 +133,6 @@ class AgoraApp(Flask):
         self._stop_event.set()
         if thread.isAlive():
             thread.join()
-
-    # def __decide_invocation(self, f):
-    #     @wraps(f)
-    #     def wrapper(*args, **kwargs):
-    #         mimes = get_accept()
-    #         if 'application/json' in mimes:
-    #             data = f(*args, **kwargs)
-    #             context = kwargs
-    #             if isinstance(data, tuple):
-    #                 context['begin'] = data[0]
-    #                 data = data[1]
-    #             if type(data) == list:
-    #                 context['size'] = len(data)
-    #             return context, data
-    #         return self.__rdfizers[f.func_name](f.func_name)
-    #     return wrapper
 
     def __execute(self, f):
         @wraps(f)
