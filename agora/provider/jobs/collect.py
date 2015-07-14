@@ -1,8 +1,34 @@
-__author__ = 'fernando'
+"""
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
+  This file is part of the Smart Developer Hub Project:
+    http://www.smartdeveloperhub.org
+
+  Center for Open Middleware
+        http://www.centeropenmiddleware.com/
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
+  Copyright (C) 2015 Center for Open Middleware.
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+            http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
+"""
+
+__author__ = 'Fernando Serena'
 
 from agora.client.agora import Agora, AGORA
 from rdflib import RDF, RDFS
 import logging
+from rdflib import Literal
+
 
 __triple_patterns = {}
 __plan_patterns = {}
@@ -24,7 +50,7 @@ def collect(tp, *args):
 
 
 def add_triple_pattern(tp, collector, args):
-    """
+    """0
     Manage the relations between triple patterns and collector functions
     :param tp:
     :param collector:
@@ -59,25 +85,24 @@ def __extract_pattern_nodes(graph):
         __plan_patterns[tpn] = '{} {} {}'.format(subject_str, predicate_str, object_str)
 
 
-def collect_fragment(event):
+def collect_fragment(event, agora_host):
     """
     Execute a search plan for the declared graph pattern and sends all obtained triples to the corresponding
     collector functions (config
     """
-    from agora.provider.server import config
-
-    agora = Agora(config['AGORA'])
+    agora = Agora(agora_host)
     graph_pattern = ""
     for tp in __triple_patterns:
         graph_pattern += '{} . '.format(tp)
-    fragment, _, graph = agora.get_fragment_generator('{%s}' % graph_pattern, stop_event=event)
+    fragment, _, graph = agora.get_fragment_generator('{%s}' % graph_pattern, stop_event=event, workers=4)
     __extract_pattern_nodes(graph)
     log.info('querying { %s}' % graph_pattern)
     for (t, s, p, o) in fragment:
         collectors = __triple_patterns[str(__plan_patterns[t])]
         for c, args in collectors:
-            # print 'Sending triple {} {} {} to {}'.format(s.n3(graph.namespace_manager), graph.qname(p),
-            #                                              o.n3(graph.namespace_manager), c)
+            print 'Sending triple {} {} {} to {}'.format(s.n3(graph.namespace_manager), graph.qname(p),
+                                                         o.n3(graph.namespace_manager), c)
             c((s, p, o))
-        if event.isSet():
-            return
+            if event.isSet():
+                raise Exception('Abort collecting fragment')
+            yield (c.func_name, (t, s, p, o))
