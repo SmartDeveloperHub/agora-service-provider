@@ -1,4 +1,3 @@
-Flask
+flask
 rdflib
 Agora-Client
-APScheduler

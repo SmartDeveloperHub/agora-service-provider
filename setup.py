@@ -28,7 +28,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="Agora-Service-Provider",
-    version="0.0.3",
+    version="0.0.10",
     author="Fernando Serena",
     author_email="fernando.serena@centeropenmiddleware.com",
     description="A library for making web services built on the Agora",
@@ -38,6 +38,6 @@ setup(
     download_url="https://github.com/smartdeveloperhub/agora-service-provider/tarball/0.0.1",
     packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
     namespace_packages=['agora'],
-    install_requires=['flask', 'rdflib', 'APScheduler', 'Agora-Client'],
+    install_requires=['flask', 'rdflib', 'Agora-Client'],
     classifiers=[]
 )
