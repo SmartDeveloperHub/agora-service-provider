@@ -100,8 +100,8 @@ def collect_fragment(event, agora_host):
     for (t, s, p, o) in fragment:
         collectors = __triple_patterns[str(__plan_patterns[t])]
         for c, args in collectors:
-            print 'Sending triple {} {} {} to {}'.format(s.n3(graph.namespace_manager), graph.qname(p),
-                                                         o.n3(graph.namespace_manager), c)
+            # print 'Sending triple {} {} {} to {}'.format(s.n3(graph.namespace_manager), graph.qname(p),
+            #                                              o.n3(graph.namespace_manager), c)
             c((s, p, o))
             if event.isSet():
                 raise Exception('Abort collecting fragment')
