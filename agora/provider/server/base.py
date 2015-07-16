@@ -116,6 +116,8 @@ class AgoraApp(Flask):
                     task(collector, (t, s, p, o), self._stop_event)
                 if self._stop_event.isSet():
                     return
+            for task in _batch_tasks:
+                task(None, None, self._stop_event)
             time.sleep(10)
 
     def run(self, host=None, port=None, debug=None, **options):

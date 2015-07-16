@@ -28,7 +28,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="Agora-Service-Provider",
-    version="0.0.12",
+    version="0.0.13",
     author="Fernando Serena",
     author_email="fernando.serena@centeropenmiddleware.com",
     description="A library for making web services built on the Agora",
