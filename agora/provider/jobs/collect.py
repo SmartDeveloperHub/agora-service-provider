@@ -28,6 +28,7 @@ from agora.client.agora import Agora, AGORA
 from rdflib import RDF, RDFS
 import logging
 from rdflib import Literal
+import time
 
 __triple_patterns = {}
 __plan_patterns = {}
@@ -106,3 +107,4 @@ def collect_fragment(event, agora_host):
             if event.isSet():
                 raise Exception('Abort collecting fragment')
             yield (c.func_name, (t, s, p, o))
+            time.sleep(0.01)
