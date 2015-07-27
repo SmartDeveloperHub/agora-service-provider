@@ -107,4 +107,4 @@ def collect_fragment(event, agora_host):
             if event.isSet():
                 raise Exception('Abort collecting fragment')
             yield (c.func_name, (t, s, p, o))
-            time.sleep(0.01)
+        time.sleep(0.01)
